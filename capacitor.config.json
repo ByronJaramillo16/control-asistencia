@@ -1,0 +1,12 @@
+{
+  "appId": "ec.controlasistencia.app",
+  "appName": "Control de Asistencia",
+  "webDir": "www",
+  "android": { "allowMixedContent": false },
+  "ios": { "contentInset": "never" },
+  "plugins": {
+    "CapacitorHttp": { "enabled": true },
+    "SplashScreen": { "launchShowDuration": 800, "backgroundColor": "#0f6b66", "showSpinner": false },
+    "StatusBar": { "style": "DEFAULT", "overlaysWebView": false }
+  }
+}
