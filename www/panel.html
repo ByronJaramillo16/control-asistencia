@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Panel de Control de Asistencia</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+/* Layout: barra lateral fija con secciones, contenido a la derecha; tablas densas con estado en pastillas */
+:root{
+  --bg:#eef3f2; --surface:#ffffff; --ink:#0f2524; --muted:#5b706e; --line:#d5e0de; --side:#0f2524; --side-ink:#d8e6e4;
+  --accent:#0f6b66; --accent-ink:#ffffff; --ok:#1d8a4e; --warn:#a86a12; --bad:#c2402f;
+  --ok-bg:#e3f4ea; --warn-bg:#fbf0dc; --bad-bg:#fbe6e2;
+  --f-display:"Familjen Grotesk",system-ui,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0b1615; --surface:#13221f; --ink:#e4efed; --muted:#93a8a5; --line:#24393a; --side:#07100f; --side-ink:#c9dad7;
+  --accent:#3fb8ae; --accent-ink:#06201e; --ok:#4fc983; --warn:#e3a94a; --bad:#ef7462;
+  --ok-bg:#13301f; --warn-bg:#33270f; --bad-bg:#3a1a15; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 var(--f-display);display:grid;grid-template-columns:220px 1fr}
+aside{background:var(--side);color:var(--side-ink);padding:20px 14px;display:flex;flex-direction:column;gap:4px}
+aside .brand{font-weight:700;font-size:1.1rem;padding:0 10px 16px}
+aside .brand small{display:block;font-weight:500;opacity:.6;font-size:.75rem;text-transform:uppercase;letter-spacing:.08em}
+aside button{background:none;border:0;color:inherit;text-align:left;font:600 .95rem var(--f-display);padding:10px;border-radius:8px;cursor:pointer;opacity:.75}
+aside button[aria-selected="true"]{background:rgba(255,255,255,.1);opacity:1}
+aside .foot{margin-top:auto;font-size:.8rem;opacity:.6;padding:10px}
+main{padding:24px 28px;overflow:auto;min-width:0;display:flex;flex-direction:column;gap:16px}
+h1{font-size:1.5rem;margin:0;letter-spacing:-.01em}
+h2{font-size:1.05rem;margin:0}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.stat{display:flex;flex-direction:column;gap:2px}
+.stat b{font-size:1.8rem;font-variant-numeric:tabular-nums;line-height:1.1}
+.label{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th{text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+td.num,.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-weight:600;font-size:.78rem;white-space:nowrap}
+.ok{background:var(--ok-bg);color:var(--ok)} .warn{background:var(--warn-bg);color:var(--warn)} .bad{background:var(--bad-bg);color:var(--bad)} .neutral{background:var(--bg);color:var(--muted)}
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+input,select{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;border-radius:8px;font:600 .9rem var(--f-display);cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.danger{color:var(--bad)}
+.btn.sm{padding:4px 10px;font-size:.8rem}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.split{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;align-items:start}
+form.stack,.stack{display:flex;flex-direction:column;gap:10px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#map{height:460px;border-radius:10px;border:1px solid var(--line)}
+.muted{color:var(--muted)}
+.toast{position:fixed;right:20px;bottom:20px;padding:12px 16px;border-radius:10px;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.15);max-width:420px}
+.login{max-width:420px;margin:10vh auto}
+.hint{font-size:.8rem;color:var(--muted)}
+@media (max-width:900px){body{grid-template-columns:1fr}aside{flex-direction:row;flex-wrap:wrap;padding:10px}aside .brand,aside .foot{display:none}.split{grid-template-columns:1fr}main{padding:16px}}
+</style>
+</head>
+<body>
+<aside id="side" hidden>
+  <div class="brand"><small>Panel de control</small><span id="empresa">Asistencia</span></div>
+  <button data-v="hoy" aria-selected="true">Hoy</button>
+  <button data-v="marc" aria-selected="false">Marcaciones</button>
+  <button data-v="emp" aria-selected="false">Empleados</button>
+  <button data-v="lug" aria-selected="false">Lugares</button>
+  <div class="foot"><span id="updated">—</span><br><a href="#" id="logout" style="color:inherit">Salir</a></div>
+</aside>
+
+<main>
+  <!-- LOGIN -->
+  <section id="v-login" class="login card stack" hidden>
+    <h1>Panel de asistencia</h1>
+    <p class="muted">Ingresa la clave de administrador para ver y administrar la asistencia.</p>
+    <div class="field" hidden><label class="label" for="cUrl">Dirección del servidor (/exec)</label><input id="cUrl" placeholder="https://script.google.com/macros/s/…/exec"></div>
+    <div class="field"><label class="label" for="cKey">Clave de administrador</label><input id="cKey" type="password" autocomplete="current-password"></div>
+    <label class="hint"><input type="checkbox" id="cRemember" checked> Recordar en este equipo</label>
+    <button class="btn primary" id="cGo">Entrar</button>
+    <p class="hint">La clave está en la hoja «Config» de tu Google Sheets (ADMIN_KEY).</p>
+  </section>
+
+  <!-- HOY -->
+  <section id="v-hoy" class="stack" hidden>
+    <div class="top"><h1 id="hoyTitle">Hoy</h1><button class="btn" id="hoyReload">Actualizar</button></div>
+    <div class="stats">
+      <div class="card stat"><span class="label">Trabajando ahora</span><b id="sIn">0</b></div>
+      <div class="card stat"><span class="label">En teletrabajo</span><b id="sTele">0</b></div>
+      <div class="card stat"><span class="label">Atrasos</span><b id="sLate">0</b></div>
+      <div class="card stat"><span class="label">Sin marcar</span><b id="sNone">0</b></div>
+    </div>
+    <div class="card tablewrap"><table>
+      <thead><tr><th>Empleado</th><th>Estado</th><th>Entrada</th><th>Salida</th><th>Lugar</th><th>Horas</th><th>Observación</th></tr></thead>
+      <tbody id="hoyBody"></tbody></table></div>
+  </section>
+
+  <!-- MARCACIONES -->
+  <section id="v-marc" class="stack" hidden>
+    <div class="top"><h1>Marcaciones</h1></div>
+    <div class="card filters">
+      <div class="field"><label class="label" for="mDesde">Desde</label><input type="date" id="mDesde"></div>
+      <div class="field"><label class="label" for="mHasta">Hasta</label><input type="date" id="mHasta"></div>
+      <div class="field"><label class="label" for="mEmp">Empleado</label><select id="mEmp"><option value="">Todos</option></select></div>
+      <button class="btn primary" id="mGo">Buscar</button>
+      <button class="btn" id="mCsv">Exportar CSV</button>
+      <button class="btn" id="mRes">Exportar resumen de horas</button>
+    </div>
+    <div class="card tablewrap"><table>
+      <thead><tr><th>Fecha</th><th>Hora</th><th>Empleado</th><th>Tipo</th><th>Lugar</th><th>Modalidad</th><th>Observación</th><th>Dist.</th><th>GPS</th><th>Bio</th><th>Mapa</th></tr></thead>
+      <tbody id="mBody"></tbody></table></div>
+  </section>
+
+  <!-- EMPLEADOS -->
+  <section id="v-emp" class="stack" hidden>
+    <div class="top"><h1>Empleados</h1></div>
+    <div class="split">
+      <div class="card tablewrap"><table>
+        <thead><tr><th>Código</th><th>Nombre</th><th>Horario</th><th>Lugares</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="eBody"></tbody></table></div>
+      <form class="card stack" id="eForm">
+        <h2 id="eTitle">Nuevo empleado</h2>
+        <div class="two">
+          <div class="field"><label class="label" for="eCod">Código</label><input id="eCod" required></div>
+          <div class="field"><label class="label" for="ePin">PIN</label><input id="ePin" inputmode="numeric" placeholder="Vacío = no cambiar"></div>
+        </div>
+        <div class="field"><label class="label" for="eNom">Nombre completo</label><input id="eNom" required></div>
+        <div class="field"><label class="label" for="eCed">Cédula</label><input id="eCed" inputmode="numeric"></div>
+        <div class="two">
+          <div class="field"><label class="label" for="eIn">Entrada</label><input type="time" id="eIn" value="08:30"></div>
+          <div class="field"><label class="label" for="eOut">Salida</label><input type="time" id="eOut" value="17:30"></div>
+        </div>
+        <div class="two">
+          <div class="field"><label class="label" for="eTol">Tolerancia (min)</label><input type="number" id="eTol" value="10" min="0"></div>
+          <div class="field"><label class="label" for="eAct">Estado</label><select id="eAct"><option value="SI">Activo</option><option value="NO">Inactivo</option></select></div>
+        </div>
+        <div class="field"><span class="label">Lugares autorizados</span><div id="eSites" class="stack"></div><span class="hint">Si no marcas ninguno, podrá marcar en todos.</span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" type="submit">Guardar</button><button class="btn" type="button" id="eNew">Limpiar</button></div>
+      </form>
+    </div>
+  </section>
+
+  <!-- LUGARES -->
+  <section id="v-lug" class="stack" hidden>
+    <div class="top"><h1>Lugares (geocercas)</h1><span class="hint">Haz clic en el mapa para ubicar el centro del lugar.</span></div>
+    <div class="split">
+      <div class="stack">
+        <div id="map"></div>
+        <div class="card tablewrap"><table>
+          <thead><tr><th>Nombre</th><th>Modalidad</th><th>Coordenadas</th><th>Radio</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="lBody"></tbody></table></div>
+      </div>
+      <form class="card stack" id="lForm">
+        <h2 id="lTitle">Nuevo lugar</h2>
+        <input type="hidden" id="lId">
+        <div class="field"><label class="label" for="lNom">Nombre</label><input id="lNom" required placeholder="Oficina Durán / Casa de Ana"></div>
+        <div class="field"><label class="label" for="lTipo">Modalidad</label><select id="lTipo"><option value="oficina">Oficina (presencial)</option><option value="teletrabajo">Teletrabajo</option></select></div>
+        <div class="two">
+          <div class="field"><label class="label" for="lLat">Latitud</label><input id="lLat" required></div>
+          <div class="field"><label class="label" for="lLng">Longitud</label><input id="lLng" required></div>
+        </div>
+        <div class="field"><label class="label" for="lRad">Radio: <span id="lRadV">100</span> m</label><input type="range" id="lRad" min="20" max="1000" step="10" value="100"></div>
+        <div class="field"><label class="label" for="lAct">Estado</label><select id="lAct"><option value="SI">Activo</option><option value="NO">Inactivo</option></select></div>
+        <div class="field"><label class="label" for="lSearch">Buscar dirección o pegar «lat, lng»</label>
+          <div style="display:flex;gap:6px"><input id="lSearch" style="flex:1;min-width:0" placeholder="-2.17, -79.83"><button class="btn" type="button" id="lFind">Ir</button></div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" type="submit">Guardar</button><button class="btn" type="button" id="lNew">Limpiar</button></div>
+      </form>
+    </div>
+  </section>
+</main>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const KEY="asist_panel_v1";
+const URL_SERVIDOR="https://script.google.com/macros/s/AKfycbwbww7ZOMe9mgKBQfrR0QEs-wn5coYVK_1fT9mwgcT5JD3KfERa-I_Y56A9x-iGg5QreA/exec";
+let C={url:URL_SERVIDOR,key:""};try{Object.assign(C,JSON.parse(localStorage.getItem(KEY)||"{}"));}catch(e){}
+if(!C.url)C.url=URL_SERVIDOR;
+let EMP=[],LUG=[];
+const pad=n=>String(n).padStart(2,"0");
+const fmtD=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const fmtH=ms=>{const m=Math.round(ms/60000);return Math.floor(m/60)+":"+pad(m%60);};
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function toast(k,t){const e=$("toast");e.className="toast "+k;e.textContent=t;e.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>e.hidden=true,5000);}
+
+async function api(body,method){
+  body=Object.assign({key:C.key},body);let r;
+  if(method==="GET")r=await fetch(C.url+"?"+new URLSearchParams(body),{redirect:"follow"});
+  else r=await fetch(C.url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body),redirect:"follow"});
+  const j=await r.json();if(!j.ok)throw new Error(j.error||"Error del servidor");return j;
+}
+
+/* ---------- navegación ---------- */
+function view(v){
+  ["login","hoy","marc","emp","lug"].forEach(x=>$("v-"+x).hidden=x!==v);
+  document.querySelectorAll("aside button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));
+  if(v==="lug")setTimeout(initMap,50);
+}
+document.querySelectorAll("aside button").forEach(b=>b.addEventListener("click",()=>{view(b.dataset.v);if(b.dataset.v==="hoy")loadHoy();if(b.dataset.v==="marc")loadMarc();}));
+
+/* ---------- conexión ---------- */
+$("cUrl").value=C.url;$("cKey").value=C.key;
+$("cGo").addEventListener("click",async()=>{
+  C.url=$("cUrl").value.trim()||URL_SERVIDOR;C.key=$("cKey").value.trim();
+  try{const j=await api({action:"admin"},"GET");$("empresa").textContent=j.empresa||"Asistencia";
+    if($("cRemember").checked){try{localStorage.setItem(KEY,JSON.stringify(C));}catch(e){}}
+    start();}catch(e){toast("bad",e.message==="Failed to fetch"?"No se pudo conectar. Revisa la dirección.":e.message);}
+});
+$("cKey").addEventListener("keydown",e=>{if(e.key==="Enter")$("cGo").click();});
+$("logout").addEventListener("click",e=>{e.preventDefault();try{localStorage.removeItem(KEY);}catch(x){}location.reload();});
+async function start(){$("side").hidden=false;view("hoy");await loadBase();loadHoy();setInterval(()=>{if(!$("v-hoy").hidden)loadHoy();},60000);}
+async function loadBase(){
+  const [e,l]=await Promise.all([api({action:"empleados"},"GET"),api({action:"lugares"},"GET")]);
+  EMP=e.data;LUG=l.data;renderEmp();renderLug();
+  $("mEmp").innerHTML='<option value="">Todos</option>'+EMP.map(x=>`<option value="${esc(x.codigo)}">${esc(x.nombre)}</option>`).join("");
+}
+
+/* ---------- HOY ---------- */
+async function loadHoy(){
+  const today=fmtD(new Date());
+  $("hoyTitle").textContent="Hoy · "+new Date().toLocaleDateString("es-EC",{weekday:"long",day:"numeric",month:"long"});
+  try{
+    const j=await api({action:"marcaciones",desde:today,hasta:today},"GET");
+    const by={};j.data.forEach(r=>(by[r.codigo]=by[r.codigo]||[]).push(r));
+    let nIn=0,nTele=0,nLate=0,nNone=0;
+    const rows=EMP.filter(e=>String(e.activo).toUpperCase()==="SI").map(e=>{
+      const m=by[e.codigo]||[];
+      if(!m.length){nNone++;return `<tr><td>${esc(e.nombre)}</td><td><span class="pill neutral">Sin marcar</span></td><td class="num">—</td><td class="num">—</td><td>—</td><td class="num">—</td><td>—</td></tr>`;}
+      const first=m.find(x=>x.tipo==="entrada"),last=m[m.length-1];
+      const lastOut=[...m].reverse().find(x=>x.tipo==="salida");
+      let t=0,open=null;m.forEach(r=>{if(r.tipo==="entrada")open=+r.ts;else if(open){t+=+r.ts-open;open=null;}});
+      if(open)t+=Date.now()-open;
+      const working=last.tipo==="entrada";if(working){nIn++;if(last.modalidad==="teletrabajo")nTele++;}
+      const late=first&&/Atraso/.test(first.observacion);if(late)nLate++;
+      const st=working?`<span class="pill ok">${last.modalidad==="teletrabajo"?"Teletrabajo":"En oficina"}</span>`:`<span class="pill neutral">Salió</span>`;
+      return `<tr><td>${esc(e.nombre)}</td><td>${st}</td><td class="num">${first?esc(String(first.hora).slice(0,5)):"—"}</td><td class="num">${lastOut&&!working?esc(String(lastOut.hora).slice(0,5)):"—"}</td><td>${esc(last.lugar)}</td><td class="num">${fmtH(t)}</td><td>${first?`<span class="pill ${late?"warn":"ok"}">${esc(first.observacion)}</span>`:""}</td></tr>`;
+    });
+    $("hoyBody").innerHTML=rows.join("")||'<tr><td colspan="7" class="muted">No hay empleados activos. Agrégalos en «Empleados».</td></tr>';
+    $("sIn").textContent=nIn;$("sTele").textContent=nTele;$("sLate").textContent=nLate;$("sNone").textContent=nNone;
+    $("updated").textContent="Actualizado "+new Date().toLocaleTimeString("es-EC",{hour12:false});
+  }catch(e){toast("bad",e.message);}
+}
+$("hoyReload").addEventListener("click",loadHoy);
+
+/* ---------- MARCACIONES ---------- */
+let MARC=[];
+(function(){const n=new Date();$("mHasta").value=fmtD(n);$("mDesde").value=fmtD(new Date(n.getFullYear(),n.getMonth(),1));})();
+async function loadMarc(){
+  try{
+    const j=await api({action:"marcaciones",desde:$("mDesde").value,hasta:$("mHasta").value,codigo:$("mEmp").value},"GET");
+    MARC=j.data;
+    $("mBody").innerHTML=MARC.slice().reverse().map(r=>{
+      const cls=/Atraso|anticipada/.test(r.observacion)?"warn":"ok";
+      return `<tr><td class="num">${esc(r.fecha)}</td><td class="num">${esc(String(r.hora).slice(0,5))}</td><td>${esc(r.nombre)}</td>
+      <td><span class="pill ${r.tipo==="entrada"?"ok":"bad"}">${esc(r.tipo)}</span></td><td>${esc(r.lugar)}</td><td>${esc(r.modalidad)}</td>
+      <td><span class="pill ${cls}">${esc(r.observacion)}</span>${r.offline==="SI"?' <span class="pill neutral">sin conexión</span>':""}</td>
+      <td class="num">${esc(r.distancia_m)} m</td><td class="num">±${esc(r.precision_m)} m</td><td>${r.biometria==="SI"?"Sí":"No"}</td>
+      <td><a href="https://www.google.com/maps?q=${encodeURIComponent(r.lat+","+r.lng)}" target="_blank" rel="noopener">Ver</a></td></tr>`;}).join("")
+      ||'<tr><td colspan="11" class="muted">No hay marcaciones en este período.</td></tr>';
+  }catch(e){toast("bad",e.message);}
+}
+$("mGo").addEventListener("click",loadMarc);
+function download(name,text){const b=new Blob(["\ufeff"+text],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);}
+const csv=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+$("mCsv").addEventListener("click",()=>{
+  if(!MARC.length){toast("warn","Primero busca marcaciones.");return;}
+  const h=["fecha","hora","codigo","nombre","tipo","lugar","modalidad","observacion","lat","lng","precision_m","distancia_m","biometria","offline","hora_dispositivo"];
+  download(`marcaciones_${$("mDesde").value}_${$("mHasta").value}.csv`,h.join(";")+"\n"+MARC.map(r=>h.map(k=>csv(r[k])).join(";")).join("\n"));
+});
+$("mRes").addEventListener("click",()=>{
+  if(!MARC.length){toast("warn","Primero busca marcaciones.");return;}
+  const by={};MARC.forEach(r=>{const k=r.codigo+"|"+r.fecha;(by[k]=by[k]||[]).push(r);});
+  const lines=Object.keys(by).sort().map(k=>{const m=by[k];let t=0,open=null,tele=false;
+    m.forEach(r=>{if(r.modalidad==="teletrabajo")tele=true;if(r.tipo==="entrada")open=+r.ts;else if(open){t+=+r.ts-open;open=null;}});
+    const f=m.find(x=>x.tipo==="entrada"),l=[...m].reverse().find(x=>x.tipo==="salida");
+    return [m[0].codigo,m[0].nombre,m[0].fecha,f?String(f.hora).slice(0,5):"",l?String(l.hora).slice(0,5):"",fmtH(t),(t/3600000).toFixed(2),tele?"Teletrabajo":"Presencial",f?f.observacion:"",open?"Falta salida":""].map(csv).join(";");});
+  download(`resumen_horas_${$("mDesde").value}_${$("mHasta").value}.csv`,"codigo;nombre;fecha;entrada;salida;horas;horas_decimal;modalidad;observacion;alerta\n"+lines.join("\n"));
+});
+
+/* ---------- EMPLEADOS ---------- */
+function renderEmp(){
+  $("eBody").innerHTML=EMP.map(e=>{
+    const ids=String(e.lugares||"").split(",").map(s=>s.trim()).filter(Boolean);
+    const names=ids.length?ids.map(id=>(LUG.find(l=>String(l.id)===id)||{nombre:"?"}).nombre).join(", "):"Todos";
+    return `<tr><td class="num">${esc(e.codigo)}</td><td>${esc(e.nombre)}</td><td class="num">${esc(e.horaEntrada)}–${esc(e.horaSalida)}</td><td>${esc(names)}</td>
+    <td><span class="pill ${String(e.activo).toUpperCase()==="SI"?"ok":"neutral"}">${String(e.activo).toUpperCase()==="SI"?"Activo":"Inactivo"}</span></td>
+    <td style="white-space:nowrap"><button class="btn sm" data-ed="${esc(e.codigo)}">Editar</button> <button class="btn sm danger" data-del="${esc(e.codigo)}">Eliminar</button></td></tr>`;}).join("")
+    ||'<tr><td colspan="6" class="muted">Aún no hay empleados. Crea el primero con el formulario.</td></tr>';
+  renderSiteChecks([]);
+}
+function renderSiteChecks(sel){
+  $("eSites").innerHTML=LUG.map(l=>`<label><input type="checkbox" value="${esc(l.id)}" ${sel.includes(String(l.id))?"checked":""}> ${esc(l.nombre)} <span class="hint">(${esc(l.tipo)})</span></label>`).join("")||'<span class="hint">Primero crea lugares.</span>';
+}
+$("eBody").addEventListener("click",async e=>{
+  const ed=e.target.dataset.ed,dl=e.target.dataset.del;
+  if(ed){const x=EMP.find(k=>String(k.codigo)===ed);$("eTitle").textContent="Editar · "+x.nombre;
+    $("eCod").value=x.codigo;$("eCod").readOnly=true;$("ePin").value="";$("eNom").value=x.nombre;$("eCed").value=x.cedula||"";
+    $("eIn").value=x.horaEntrada||"08:30";$("eOut").value=x.horaSalida||"17:30";$("eTol").value=x.tolerancia||0;$("eAct").value=String(x.activo).toUpperCase()==="SI"?"SI":"NO";
+    renderSiteChecks(String(x.lugares||"").split(",").map(s=>s.trim()));}
+  if(dl){if(e.target.dataset.sure!=="1"){e.target.dataset.sure="1";e.target.textContent="¿Confirmar?";setTimeout(()=>{e.target.dataset.sure="";e.target.textContent="Eliminar";},4000);return;}
+    try{await api({action:"deleteEmpleado",id:dl},"POST");toast("ok","Empleado eliminado.");await loadBase();}catch(x){toast("bad",x.message);}}
+});
+function clearEmp(){$("eForm").reset();$("eCod").readOnly=false;$("eTitle").textContent="Nuevo empleado";renderSiteChecks([]);}
+$("eNew").addEventListener("click",clearEmp);
+$("eForm").addEventListener("submit",async e=>{e.preventDefault();
+  const isNew=!$("eCod").readOnly;
+  if(isNew&&!$("ePin").value){toast("warn","Asigna un PIN al empleado nuevo.");return;}
+  const data={codigo:$("eCod").value.trim(),pin:$("ePin").value.trim(),nombre:$("eNom").value.trim(),cedula:$("eCed").value.trim(),
+    activo:$("eAct").value,horaEntrada:$("eIn").value,horaSalida:$("eOut").value,tolerancia:$("eTol").value,
+    lugares:[...$("eSites").querySelectorAll("input:checked")].map(i=>i.value).join(",")};
+  try{await api({action:"saveEmpleado",data},"POST");toast("ok","Empleado guardado.");clearEmp();await loadBase();}catch(x){toast("bad",x.message);}
+});
+
+/* ---------- LUGARES + MAPA ---------- */
+let map=null,layer=null,draft=null;
+function initMap(){
+  if(!window.L){$("map").innerHTML='<p class="muted" style="padding:16px">El mapa necesita internet. Puedes escribir las coordenadas a mano.</p>';return;}
+  if(map){map.invalidateSize();return;}
+  map=L.map("map").setView([-2.17,-79.84],13);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map);
+  layer=L.layerGroup().addTo(map);
+  map.on("click",ev=>{$("lLat").value=ev.latlng.lat.toFixed(6);$("lLng").value=ev.latlng.lng.toFixed(6);drawDraft();});
+  drawSites();
+}
+function drawSites(){
+  if(!map)return;layer.clearLayers();const b=[];
+  LUG.forEach(l=>{const c=[+l.lat,+l.lng];if(isNaN(c[0]))return;b.push(c);
+    const col=l.tipo==="teletrabajo"?"#a86a12":"#0f6b66";
+    L.circle(c,{radius:+l.radio,color:col,weight:2,fillOpacity:.15}).addTo(layer).bindTooltip(l.nombre);
+    L.circleMarker(c,{radius:4,color:col,fillOpacity:1}).addTo(layer);});
+  if(b.length)map.fitBounds(L.latLngBounds(b).pad(.3),{maxZoom:16});
+}
+function drawDraft(){
+  if(!map)return;const la=parseFloat($("lLat").value),ln=parseFloat($("lLng").value);
+  if(draft){draft.remove();draft=null;}if(isNaN(la)||isNaN(ln))return;
+  draft=L.circle([la,ln],{radius:+$("lRad").value,color:"#c2402f",dashArray:"6 6",weight:2,fillOpacity:.1}).addTo(map);
+}
+$("lRad").addEventListener("input",()=>{$("lRadV").textContent=$("lRad").value;drawDraft();});
+["lLat","lLng"].forEach(id=>$(id).addEventListener("change",drawDraft));
+$("lFind").addEventListener("click",async()=>{
+  const q=$("lSearch").value.trim();const m=q.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+  let la,ln;
+  if(m){la=+m[1];ln=+m[2];}
+  else{try{const r=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(q));const j=await r.json();if(!j.length){toast("warn","No se encontró esa dirección.");return;}la=+j[0].lat;ln=+j[0].lon;}catch(e){toast("bad","No se pudo buscar la dirección.");return;}}
+  $("lLat").value=la.toFixed(6);$("lLng").value=ln.toFixed(6);if(map)map.setView([la,ln],17);drawDraft();
+});
+function renderLug(){
+  $("lBody").innerHTML=LUG.map(l=>`<tr><td>${esc(l.nombre)}</td><td><span class="pill ${l.tipo==="teletrabajo"?"warn":"ok"}">${esc(l.tipo)}</span></td>
+    <td class="mono">${(+l.lat).toFixed(5)}, ${(+l.lng).toFixed(5)}</td><td class="num">${esc(l.radio)} m</td>
+    <td><span class="pill ${String(l.activo||"SI").toUpperCase()==="SI"?"ok":"neutral"}">${String(l.activo||"SI").toUpperCase()==="SI"?"Activo":"Inactivo"}</span></td>
+    <td style="white-space:nowrap"><button class="btn sm" data-ed="${esc(l.id)}">Editar</button> <button class="btn sm danger" data-del="${esc(l.id)}">Eliminar</button></td></tr>`).join("")
+    ||'<tr><td colspan="6" class="muted">Aún no hay lugares. Haz clic en el mapa sobre tu oficina y guárdalo.</td></tr>';
+  drawSites();
+}
+$("lBody").addEventListener("click",async e=>{
+  const ed=e.target.dataset.ed,dl=e.target.dataset.del;
+  if(ed){const l=LUG.find(k=>String(k.id)===ed);$("lTitle").textContent="Editar · "+l.nombre;$("lId").value=l.id;$("lNom").value=l.nombre;$("lTipo").value=l.tipo;
+    $("lLat").value=l.lat;$("lLng").value=l.lng;$("lRad").value=l.radio;$("lRadV").textContent=l.radio;$("lAct").value=String(l.activo||"SI").toUpperCase()==="SI"?"SI":"NO";
+    if(map)map.setView([+l.lat,+l.lng],17);drawDraft();}
+  if(dl){if(e.target.dataset.sure!=="1"){e.target.dataset.sure="1";e.target.textContent="¿Confirmar?";setTimeout(()=>{e.target.dataset.sure="";e.target.textContent="Eliminar";},4000);return;}
+    try{await api({action:"deleteLugar",id:dl},"POST");toast("ok","Lugar eliminado.");await loadBase();}catch(x){toast("bad",x.message);}}
+});
+function clearLug(){$("lForm").reset();$("lId").value="";$("lRadV").textContent="100";$("lTitle").textContent="Nuevo lugar";if(draft){draft.remove();draft=null;}}
+$("lNew").addEventListener("click",clearLug);
+$("lForm").addEventListener("submit",async e=>{e.preventDefault();
+  const la=parseFloat(String($("lLat").value).replace(",",".")),ln=parseFloat(String($("lLng").value).replace(",","."));
+  if(isNaN(la)||isNaN(ln)){toast("bad","Coordenadas no válidas.");return;}
+  const data={id:$("lId").value,nombre:$("lNom").value.trim(),tipo:$("lTipo").value,lat:la,lng:ln,radio:$("lRad").value,activo:$("lAct").value};
+  try{await api({action:"saveLugar",data},"POST");toast("ok","Lugar guardado.");clearLug();await loadBase();}catch(x){toast("bad",x.message);}
+});
+
+/* ---------- arranque ---------- */
+if(C.url&&C.key){api({action:"admin"},"GET").then(j=>{$("empresa").textContent=j.empresa||"Asistencia";start();}).catch(()=>view("login"));}
+else view("login");
+})();
+</script>
+</body>
+</html>
