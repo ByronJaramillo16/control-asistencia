@@ -1,0 +1,8 @@
+node_modules/
+android/
+ios/
+assets/
+salida/
+www/fonts/
+www/*.png
+*.jks
