@@ -64,6 +64,10 @@ form.stack,.stack{display:flex;flex-direction:column;gap:10px}
 .toast{position:fixed;right:20px;bottom:20px;padding:12px 16px;border-radius:10px;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.15);max-width:420px}
 .login{max-width:420px;margin:10vh auto}
 .hint{font-size:.8rem;color:var(--muted)}
+.results{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden;max-height:220px;overflow-y:auto}
+.results button{all:unset;cursor:pointer;padding:8px 10px;font-size:.85rem;border-bottom:1px solid var(--line);color:var(--ink)}
+.results button:last-child{border-bottom:0}
+.results button:hover,.results button:focus-visible{background:var(--bg)}
 @media (max-width:900px){body{grid-template-columns:1fr}aside{flex-direction:row;flex-wrap:wrap;padding:10px}aside .brand,aside .foot{display:none}.split{grid-template-columns:1fr}main{padding:16px}}
 </style>
 </head>
@@ -150,7 +154,7 @@ form.stack,.stack{display:flex;flex-direction:column;gap:10px}
 
   <!-- LUGARES -->
   <section id="v-lug" class="stack" hidden>
-    <div class="top"><h1>Lugares (geocercas)</h1><span class="hint">Haz clic en el mapa para ubicar el centro del lugar.</span></div>
+    <div class="top"><h1>Lugares (geocercas)</h1><span class="hint">Busca la dirección, usa tu ubicación o haz clic en el mapa.</span></div>
     <div class="split">
       <div class="stack">
         <div id="map"></div>
@@ -161,7 +165,12 @@ form.stack,.stack{display:flex;flex-direction:column;gap:10px}
       <form class="card stack" id="lForm">
         <h2 id="lTitle">Nuevo lugar</h2>
         <input type="hidden" id="lId">
-        <div class="field"><label class="label" for="lNom">Nombre</label><input id="lNom" required placeholder="Oficina Durán / Casa de Ana"></div>
+        <div class="field"><label class="label" for="lSearch">1. Busca el lugar</label>
+          <div style="display:flex;gap:6px"><input id="lSearch" style="flex:1;min-width:0" placeholder="Dirección, nombre del lugar o enlace de Google Maps"><button class="btn primary" type="button" id="lFind">Buscar</button></div>
+          <div id="lResults" class="results" hidden></div>
+          <button class="btn" type="button" id="lHere">Usar mi ubicación actual</button>
+          <span class="hint">También puedes hacer clic en el mapa o arrastrar el marcador para ajustar el punto exacto.</span></div>
+        <div class="field"><label class="label" for="lNom">2. Nombre del lugar</label><input id="lNom" required placeholder="Oficina Durán / Casa de Ana"></div>
         <div class="field"><label class="label" for="lTipo">Modalidad</label><select id="lTipo"><option value="oficina">Oficina (presencial)</option><option value="teletrabajo">Teletrabajo</option></select></div>
         <div class="two">
           <div class="field"><label class="label" for="lLat">Latitud</label><input id="lLat" required></div>
@@ -169,8 +178,6 @@ form.stack,.stack{display:flex;flex-direction:column;gap:10px}
         </div>
         <div class="field"><label class="label" for="lRad">Radio: <span id="lRadV">100</span> m</label><input type="range" id="lRad" min="20" max="1000" step="10" value="100"></div>
         <div class="field"><label class="label" for="lAct">Estado</label><select id="lAct"><option value="SI">Activo</option><option value="NO">Inactivo</option></select></div>
-        <div class="field"><label class="label" for="lSearch">Buscar dirección o pegar «lat, lng»</label>
-          <div style="display:flex;gap:6px"><input id="lSearch" style="flex:1;min-width:0" placeholder="-2.17, -79.83"><button class="btn" type="button" id="lFind">Ir</button></div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" type="submit">Guardar</button><button class="btn" type="button" id="lNew">Limpiar</button></div>
       </form>
     </div>
@@ -322,14 +329,14 @@ $("eForm").addEventListener("submit",async e=>{e.preventDefault();
 });
 
 /* ---------- LUGARES + MAPA ---------- */
-let map=null,layer=null,draft=null;
+let map=null,layer=null,draft=null,pin=null;
 function initMap(){
   if(!window.L){$("map").innerHTML='<p class="muted" style="padding:16px">El mapa necesita internet. Puedes escribir las coordenadas a mano.</p>';return;}
   if(map){map.invalidateSize();return;}
   map=L.map("map").setView([-2.17,-79.84],13);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map);
   layer=L.layerGroup().addTo(map);
-  map.on("click",ev=>{$("lLat").value=ev.latlng.lat.toFixed(6);$("lLng").value=ev.latlng.lng.toFixed(6);drawDraft();});
+  map.on("click",ev=>setPoint(ev.latlng.lat,ev.latlng.lng,Math.max(map.getZoom(),17)));
   drawSites();
 }
 function drawSites(){
@@ -342,17 +349,54 @@ function drawSites(){
 }
 function drawDraft(){
   if(!map)return;const la=parseFloat($("lLat").value),ln=parseFloat($("lLng").value);
-  if(draft){draft.remove();draft=null;}if(isNaN(la)||isNaN(ln))return;
+  if(draft){draft.remove();draft=null;}if(isNaN(la)||isNaN(ln)){if(pin){pin.remove();pin=null;}return;}
   draft=L.circle([la,ln],{radius:+$("lRad").value,color:"#c2402f",dashArray:"6 6",weight:2,fillOpacity:.1}).addTo(map);
+  if(!pin){pin=L.marker([la,ln],{draggable:true,title:"Arrástrame para ajustar"}).addTo(map);
+    pin.on("dragend",()=>{const p=pin.getLatLng();$("lLat").value=p.lat.toFixed(6);$("lLng").value=p.lng.toFixed(6);drawDraft();});}
+  else pin.setLatLng([la,ln]);
+}
+function setPoint(la,ln,zoom){
+  $("lLat").value=(+la).toFixed(6);$("lLng").value=(+ln).toFixed(6);
+  if(map)map.setView([+la,+ln],zoom||18);drawDraft();
+  if(!$("lNom").value)$("lNom").focus();
+}
+function coordsFrom(q){
+  const pats=[/^\s*(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)\s*$/,/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/,/@(-?\d+\.\d+),(-?\d+\.\d+)/,/[?&](?:q|ll|query|center|destination)=(-?\d+\.\d+)(?:,|%2C)(-?\d+\.\d+)/i];
+  for(const re of pats){const m=q.match(re);if(m){const la=+m[1],ln=+m[2];if(Math.abs(la)<=90&&Math.abs(ln)<=180)return [la,ln];}}
+  return null;
 }
 $("lRad").addEventListener("input",()=>{$("lRadV").textContent=$("lRad").value;drawDraft();});
 ["lLat","lLng"].forEach(id=>$(id).addEventListener("change",drawDraft));
-$("lFind").addEventListener("click",async()=>{
-  const q=$("lSearch").value.trim();const m=q.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
-  let la,ln;
-  if(m){la=+m[1];ln=+m[2];}
-  else{try{const r=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(q));const j=await r.json();if(!j.length){toast("warn","No se encontró esa dirección.");return;}la=+j[0].lat;ln=+j[0].lon;}catch(e){toast("bad","No se pudo buscar la dirección.");return;}}
-  $("lLat").value=la.toFixed(6);$("lLng").value=ln.toFixed(6);if(map)map.setView([la,ln],17);drawDraft();
+async function buscarLugar(){
+  const q=$("lSearch").value.trim();const box=$("lResults");box.hidden=true;box.textContent="";
+  if(!q){toast("warn","Escribe una dirección o pega un enlace de Google Maps.");return;}
+  const c=coordsFrom(q);if(c){setPoint(c[0],c[1]);toast("ok","Ubicación encontrada. Ajusta el marcador si hace falta.");return;}
+  if(/goo\.gl|maps\.app/i.test(q)){toast("warn","Ese enlace corto no trae coordenadas. Ábrelo en Google Maps, mantén presionado el punto y copia los números que aparecen (ej. -2.17, -79.84).");return;}
+  $("lFind").disabled=true;$("lFind").textContent="Buscando…";
+  try{
+    const u="https://nominatim.openstreetmap.org/search?format=json&limit=6&accept-language=es&countrycodes=ec&q="+encodeURIComponent(q);
+    let j=await fetch(u).then(r=>r.json());
+    if(!j.length)j=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=6&accept-language=es&q="+encodeURIComponent(q)).then(r=>r.json());
+    if(!j.length){toast("warn","No encontré ese lugar. Prueba con calle y ciudad, o haz clic directamente en el mapa.");return;}
+    if(j.length===1){setPoint(j[0].lat,j[0].lon);return;}
+    j.forEach(r=>{const b=document.createElement("button");b.type="button";b.textContent=r.display_name;b.addEventListener("click",()=>{setPoint(r.lat,r.lon);box.hidden=true;});box.appendChild(b);});
+    box.hidden=false;setPoint(j[0].lat,j[0].lon,16);
+  }catch(e){toast("bad","No se pudo buscar. Revisa tu internet o haz clic en el mapa.");}
+  finally{$("lFind").disabled=false;$("lFind").textContent="Buscar";}
+}
+$("lFind").addEventListener("click",buscarLugar);
+$("lSearch").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();buscarLugar();}});
+$("lHere").addEventListener("click",()=>{
+  if(!navigator.geolocation){toast("bad","Este navegador no permite obtener la ubicación.");return;}
+  $("lHere").disabled=true;$("lHere").textContent="Obteniendo ubicación…";
+  navigator.geolocation.getCurrentPosition(p=>{
+    setPoint(p.coords.latitude,p.coords.longitude);
+    toast("ok","Ubicación tomada (precisión ±"+Math.round(p.coords.accuracy)+" m). Ajusta el marcador si hace falta.");
+    $("lHere").disabled=false;$("lHere").textContent="Usar mi ubicación actual";
+  },err=>{
+    toast("bad",err.code===1?"Permiso de ubicación denegado en este navegador.":"No se pudo obtener la ubicación.");
+    $("lHere").disabled=false;$("lHere").textContent="Usar mi ubicación actual";
+  },{enableHighAccuracy:true,timeout:20000,maximumAge:0});
 });
 function renderLug(){
   $("lBody").innerHTML=LUG.map(l=>`<tr><td>${esc(l.nombre)}</td><td><span class="pill ${l.tipo==="teletrabajo"?"warn":"ok"}">${esc(l.tipo)}</span></td>
@@ -370,11 +414,11 @@ $("lBody").addEventListener("click",async e=>{
   if(dl){if(e.target.dataset.sure!=="1"){e.target.dataset.sure="1";e.target.textContent="¿Confirmar?";setTimeout(()=>{e.target.dataset.sure="";e.target.textContent="Eliminar";},4000);return;}
     try{await api({action:"deleteLugar",id:dl},"POST");toast("ok","Lugar eliminado.");await loadBase();}catch(x){toast("bad",x.message);}}
 });
-function clearLug(){$("lForm").reset();$("lId").value="";$("lRadV").textContent="100";$("lTitle").textContent="Nuevo lugar";if(draft){draft.remove();draft=null;}}
+function clearLug(){$("lForm").reset();$("lId").value="";$("lRadV").textContent="100";$("lTitle").textContent="Nuevo lugar";$("lResults").hidden=true;if(draft){draft.remove();draft=null;}if(pin){pin.remove();pin=null;}}
 $("lNew").addEventListener("click",clearLug);
 $("lForm").addEventListener("submit",async e=>{e.preventDefault();
   const la=parseFloat(String($("lLat").value).replace(",",".")),ln=parseFloat(String($("lLng").value).replace(",","."));
-  if(isNaN(la)||isNaN(ln)){toast("bad","Coordenadas no válidas.");return;}
+  if(isNaN(la)||isNaN(ln)){toast("warn","Primero ubica el lugar: búscalo, usa tu ubicación o haz clic en el mapa.");return;}
   const data={id:$("lId").value,nombre:$("lNom").value.trim(),tipo:$("lTipo").value,lat:la,lng:ln,radio:$("lRad").value,activo:$("lAct").value};
   try{await api({action:"saveLugar",data},"POST");toast("ok","Lugar guardado.");clearLug();await loadBase();}catch(x){toast("bad",x.message);}
 });
