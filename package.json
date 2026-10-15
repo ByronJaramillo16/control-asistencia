@@ -1,0 +1,27 @@
+{
+  "name": "control-asistencia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "App nativa de asistencia por geocerca",
+  "scripts": {
+    "preparar": "python3 scripts/preparar.py web",
+    "android": "npx cap add android && npx capacitor-assets generate --android && python3 scripts/preparar.py android && npx cap sync android",
+    "ios": "npx cap add ios && npx capacitor-assets generate --ios && python3 scripts/preparar.py ios && npx cap sync ios"
+  },
+  "dependencies": {
+    "@aparajita/capacitor-biometric-auth": "9.1.2",
+    "@capacitor/android": "7.6.9",
+    "@capacitor/app": "7.1.2",
+    "@capacitor/core": "7.6.9",
+    "@capacitor/geolocation": "7.1.8",
+    "@capacitor/ios": "7.6.9",
+    "@capacitor/splash-screen": "7.0.5",
+    "@capacitor/status-bar": "7.0.6"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "3.0.5",
+    "@capacitor/cli": "7.6.9",
+    "@fontsource/familjen-grotesk": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0"
+  }
+}
