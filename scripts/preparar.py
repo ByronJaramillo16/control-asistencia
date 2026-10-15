@@ -65,8 +65,8 @@ def android():
 
     def gradle(s):
         if "KEYSTORE_FILE" in s: return s
-        s = re.sub(r'versionCode \d+', 'versionCode (System.getenv("VERSION_CODE") ?: "1").toInteger()', s)
-        s = re.sub(r'versionName "[^"]*"', 'versionName "1.0." + (System.getenv("VERSION_CODE") ?: "0")', s)
+        s = re.sub(r'versionCode \d+', 'versionCode((System.getenv("VERSION_CODE") ?: "1").toInteger())', s)
+        s = re.sub(r'versionName "[^"]*"', 'versionName("1.0." + (System.getenv("VERSION_CODE") ?: "0"))', s)
         firma = '''    def ks = System.getenv("KEYSTORE_FILE")
     signingConfigs {
         if (ks) {
